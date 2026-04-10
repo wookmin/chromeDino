@@ -31,6 +31,17 @@ export const calculateAverageEAR = (landmarks) => {
   return (leftEAR + rightEAR) / 2
 }
 
+export const calculateEyeEARs = (landmarks) => {
+  const leftEAR = calculateEyeEAR(landmarks, LEFT_EYE_INDICES)
+  const rightEAR = calculateEyeEAR(landmarks, RIGHT_EYE_INDICES)
+
+  return {
+    leftEAR,
+    rightEAR,
+    averageEAR: (leftEAR + rightEAR) / 2,
+  }
+}
+
 export const EYE_LANDMARKS = {
   LEFT_EYE_INDICES,
   RIGHT_EYE_INDICES,

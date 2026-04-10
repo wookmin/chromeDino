@@ -16,6 +16,7 @@ class DinoGame {
     this.spawnInterval = 1.2
     this.gameOver = false
     this.animationId = null
+    this.flashUntil = 0
 
     this.dino = {
       x: 72,
@@ -58,6 +59,7 @@ class DinoGame {
   jump() {
     if (this.gameOver) {
       this.reset()
+      this.flashUntil = performance.now() + 180
       return
     }
 
@@ -67,6 +69,7 @@ class DinoGame {
 
     this.dino.velocityY = this.jumpVelocity
     this.dino.grounded = false
+    this.flashUntil = performance.now() + 180
   }
 
   spawnObstacle() {
@@ -129,16 +132,16 @@ class DinoGame {
 
   renderBackground() {
     const { ctx } = this
-    ctx.fillStyle = '#fff9ef'
+    ctx.fillStyle = '#dff4ed'
     ctx.fillRect(0, 0, this.width, this.height)
 
     const gradient = ctx.createLinearGradient(0, 0, this.width, this.height)
-    gradient.addColorStop(0, 'rgba(255, 204, 112, 0.18)')
-    gradient.addColorStop(1, 'rgba(255, 255, 255, 0)')
+    gradient.addColorStop(0, 'rgba(29, 158, 117, 0.18)')
+    gradient.addColorStop(1, 'rgba(247, 253, 251, 0.08)')
     ctx.fillStyle = gradient
     ctx.fillRect(0, 0, this.width, this.height)
 
-    ctx.strokeStyle = '#3f3a33'
+    ctx.strokeStyle = '#6ebca8'
     ctx.lineWidth = 3
     ctx.beginPath()
     ctx.moveTo(0, this.groundY)
@@ -150,31 +153,35 @@ class DinoGame {
     const { ctx } = this
     this.renderBackground()
 
-    ctx.fillStyle = '#1f1f1f'
+    ctx.fillStyle = '#1d9e75'
     ctx.fillRect(this.dino.x, this.dino.y, this.dino.width, this.dino.height)
 
-    ctx.fillStyle = '#456b3d'
+    ctx.fillStyle = '#0e7460'
     this.obstacles.forEach((obstacle) => {
       ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height)
     })
 
-    ctx.fillStyle = '#1f1f1f'
+    ctx.fillStyle = '#085041'
     ctx.font = '700 20px "Trebuchet MS", sans-serif'
-    ctx.fillText(`Score ${Math.floor(this.score)}`, this.width - 140, 34)
+    ctx.fillText(`score ${Math.floor(this.score)}`, this.width - 150, 34)
+
+    if (performance.now() < this.flashUntil) {
+      ctx.strokeStyle = 'rgba(157, 234, 214, 0.95)'
+      ctx.lineWidth = 10
+      ctx.strokeRect(5, 5, this.width - 10, this.height - 10)
+    }
 
     if (!this.gameOver) {
       return
     }
 
-    ctx.fillStyle = 'rgba(18, 18, 18, 0.72)'
+    ctx.fillStyle = 'rgba(29, 158, 117, 0.18)'
     ctx.fillRect(0, 0, this.width, this.height)
-    ctx.fillStyle = '#ffffff'
-    ctx.font = '700 28px "Trebuchet MS", sans-serif'
-    ctx.textAlign = 'center'
-    ctx.fillText('Game Over', this.width / 2, this.height / 2 - 10)
-    ctx.font = '500 16px "Trebuchet MS", sans-serif'
-    ctx.fillText('Blink, click, or press space to restart', this.width / 2, this.height / 2 + 24)
-    ctx.textAlign = 'start'
+    ctx.strokeStyle = 'rgba(8, 80, 65, 0.45)'
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.arc(this.width / 2, this.height / 2, 28, 0, Math.PI * 2)
+    ctx.stroke()
   }
 }
 

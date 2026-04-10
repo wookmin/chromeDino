@@ -17,9 +17,9 @@ export const createDebugOverlay = (canvas, config) => {
   const draw = (landmarks) => {
     clear()
 
-    context.fillStyle = '#ffcf5c'
-    context.strokeStyle = '#101820'
-    context.lineWidth = 2
+    context.fillStyle = '#9fe0cf'
+    context.strokeStyle = '#085041'
+    context.lineWidth = 1.5
 
     OVERLAY_POINTS.forEach((index) => {
       const point = landmarks[index]

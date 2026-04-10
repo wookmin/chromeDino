@@ -1,6 +1,6 @@
 import '@mediapipe/camera_utils'
 import '@mediapipe/face_mesh'
-import { calculateAverageEAR } from './earCalculator.js'
+import { calculateEyeEARs } from './earCalculator.js'
 
 const CameraClass = globalThis.Camera
 const FaceMeshClass = globalThis.FaceMesh
@@ -44,11 +44,15 @@ export const createFaceMeshController = ({
       return
     }
 
+    const { leftEAR, rightEAR, averageEAR } = calculateEyeEARs(landmarks)
+
     onResults({
       frameId: frameId += 1,
       hasFace: true,
       landmarks,
-      ear: calculateAverageEAR(landmarks),
+      leftEAR,
+      rightEAR,
+      ear: averageEAR,
       timestamp: performance.now(),
     })
   })
