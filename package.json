@@ -1,0 +1,21 @@
+{
+  "name": "chromedino",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "postinstall": "node scripts/sync-mediapipe-assets.mjs",
+    "predev": "node scripts/sync-mediapipe-assets.mjs",
+    "prebuild": "node scripts/sync-mediapipe-assets.mjs",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@mediapipe/camera_utils": "^0.3.1675466862",
+    "@mediapipe/face_mesh": "^0.4.1633559619"
+  },
+  "devDependencies": {
+    "vite": "^8.0.4"
+  }
+}
