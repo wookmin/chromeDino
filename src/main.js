@@ -1,11 +1,13 @@
-import "./style.css";
-import { CONFIG } from "./config.js";
-import { BlinkDetector } from "./modules/blinkDetector.js";
-import { createDebugOverlay } from "./modules/debugOverlay.js";
-import { createDinoGame, jump } from "./modules/dinoGame.js";
-import { createFaceMeshController } from "./modules/faceMesh.js";
+import './style.css'
+import { CONFIG } from './config.js'
+import { createAudioController } from './modules/audio.js'
+import { createFaceMeshController } from './modules/faceMesh.js'
+import { createMaze, drawMaze, markExplored } from './modules/maze.js'
+import { createPlayer } from './modules/player.js'
+import { createUi } from './modules/ui.js'
+import { createEyeStateManager } from './modules/eyeState.js'
 
-const app = document.querySelector("#app");
+const app = document.querySelector('#app')
 
 app.innerHTML = `
   <div class="app-shell">
@@ -14,21 +16,16 @@ app.innerHTML = `
         <div class="brand-mark" aria-hidden="true">
           <span class="brand-eye"></span>
         </div>
-        <h1>blink</h1>
+        <h1>blink maze</h1>
       </div>
-      <div class="header-pills">
-        <div class="hint-pill">깜빡여서 점프</div>
-        <button class="camera-toggle" id="camera-toggle" type="button">끄기</button>
-      </div>
+      <div class="hint-pill">눈 감으면 움직여요</div>
     </header>
 
     <main class="dashboard">
       <section class="panel vision-panel">
         <div class="camera-stage">
           <video id="webcam" playsinline muted></video>
-          <canvas id="overlay"></canvas>
           <div id="camera-error" class="camera-error hidden"></div>
-          <div class="status-dot state-open" id="blink-state" aria-label="blink status"></div>
         </div>
         <div class="ear-panel">
           <div class="ear-row">
@@ -42,209 +39,222 @@ app.innerHTML = `
             <strong id="ear-right">0.000</strong>
           </div>
         </div>
+        <div class="state-row">
+          <span id="eye-dot" class="status-dot paused"></span>
+          <strong id="eye-label">paused</strong>
+        </div>
       </section>
 
-      <section class="panel game-panel">
-        <canvas id="game" width="720" height="320" aria-label="Chrome Dino style game"></canvas>
+      <section class="panel maze-panel">
+        <canvas
+          id="maze-canvas"
+          width="${CONFIG.MAZE_COLS * CONFIG.CELL_SIZE}"
+          height="${CONFIG.MAZE_ROWS * CONFIG.CELL_SIZE}"
+          aria-label="blink maze"
+        ></canvas>
       </section>
     </main>
 
-    <section class="panel control-panel">
-      <div class="metrics">
-        <div class="metric-card">
-          <span class="metric-label">오늘</span>
-          <strong id="blink-count">0</strong>
-        </div>
-        <div class="metric-card">
-          <span class="metric-label">대비</span>
-          <strong id="comfort-score">0%</strong>
-        </div>
-        <div class="metric-card">
-          <span class="metric-label">시간</span>
-          <strong id="session-time">00:00</strong>
-        </div>
+    <section class="panel stat-panel">
+      <div class="stat-card">
+        <span class="stat-label">이동</span>
+        <strong id="move-count">0</strong>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">충돌</span>
+        <strong id="wall-count">0</strong>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">시간</span>
+        <strong id="elapsed-time">00:00</strong>
       </div>
     </section>
   </div>
-`;
+`
 
-const webcam = document.querySelector("#webcam");
-const overlayCanvas = document.querySelector("#overlay");
-const gameCanvas = document.querySelector("#game");
-const earLeft = document.querySelector("#ear-left");
-const earRight = document.querySelector("#ear-right");
-const earLeftFill = document.querySelector("#ear-left-fill");
-const earRightFill = document.querySelector("#ear-right-fill");
-const blinkCount = document.querySelector("#blink-count");
-const comfortScore = document.querySelector("#comfort-score");
-const sessionTime = document.querySelector("#session-time");
-const blinkState = document.querySelector("#blink-state");
-const permissionStatus = document.querySelector("#permission-status");
-const cameraError = document.querySelector("#camera-error");
-const cameraToggle = document.querySelector("#camera-toggle");
+const webcam = document.querySelector('#webcam')
+const mazeCanvas = document.querySelector('#maze-canvas')
+const cameraError = document.querySelector('#camera-error')
 
-const blinkDetector = new BlinkDetector(CONFIG);
-const overlay = createDebugOverlay(overlayCanvas, CONFIG);
-const dinoGame = createDinoGame(gameCanvas);
-const sessionStartedAt = performance.now();
+const audio = createAudioController()
+const ui = createUi({
+  earLeft: document.querySelector('#ear-left'),
+  earRight: document.querySelector('#ear-right'),
+  earLeftFill: document.querySelector('#ear-left-fill'),
+  earRightFill: document.querySelector('#ear-right-fill'),
+  eyeDot: document.querySelector('#eye-dot'),
+  eyeLabel: document.querySelector('#eye-label'),
+  moveCount: document.querySelector('#move-count'),
+  wallCount: document.querySelector('#wall-count'),
+  elapsedTime: document.querySelector('#elapsed-time'),
+})
 
+const eyeState = createEyeStateManager(CONFIG)
+const player = createPlayer({
+  cols: CONFIG.MAZE_COLS,
+  rows: CONFIG.MAZE_ROWS,
+  moveIntervalMs: CONFIG.MOVE_INTERVAL_MS,
+})
+
+let maze = createMaze(CONFIG.MAZE_COLS, CONFIG.MAZE_ROWS)
 let latestFaceState = {
   frameId: 0,
   hasFace: false,
-  landmarks: [],
   leftEAR: 0,
   rightEAR: 0,
   ear: 0,
   timestamp: performance.now(),
-};
-
-let latestDetectionResult = {
-  label: "WAITING",
-  triggerJump: false,
-  blinkCount: 0,
-  isClosed: false,
-  threshold: CONFIG.EAR_THRESHOLD,
-};
-let lastProcessedFrameId = -1;
-let cameraActive = false;
-
-const setStatusPill = (isBlinking) => {
-  blinkState.classList.toggle("state-open", !isBlinking);
-  blinkState.classList.toggle("state-blink", isBlinking);
-};
+}
+let eyeSnapshot = eyeState.update(null, performance.now())
+let lastProcessedFrameId = -1
+const sessionStartedAt = performance.now()
 
 const showCameraError = (message) => {
-  cameraError.textContent = message;
-  cameraError.classList.remove("hidden");
-  permissionStatus.textContent = "연결 오류";
-  cameraToggle.textContent = "켜기";
-  cameraActive = false;
-};
+  cameraError.textContent = message
+  cameraError.classList.remove('hidden')
+}
 
-const updateCameraButton = () => {
-  cameraToggle.textContent = cameraActive ? "끄기" : "켜기";
-  cameraToggle.classList.toggle("is-off", !cameraActive);
-};
+const hideCameraError = () => {
+  cameraError.classList.add('hidden')
+}
+
+const resetMaze = () => {
+  maze = createMaze(CONFIG.MAZE_COLS, CONFIG.MAZE_ROWS)
+  player.reset()
+  markExplored(maze, player.col, player.row)
+}
+
+const directionMap = {
+  ArrowUp: 'up',
+  ArrowDown: 'down',
+  ArrowLeft: 'left',
+  ArrowRight: 'right',
+}
+
+window.addEventListener('keydown', async (event) => {
+  const direction = directionMap[event.key]
+
+  if (!direction) {
+    return
+  }
+
+  event.preventDefault()
+  await audio.resume()
+
+  if (!eyeSnapshot.isClosed) {
+    return
+  }
+
+  player.press(direction)
+})
+
+window.addEventListener('keyup', (event) => {
+  const direction = directionMap[event.key]
+
+  if (!direction) {
+    return
+  }
+
+  player.release(direction)
+})
+
+window.addEventListener('blur', () => {
+  player.clearInput()
+})
+
+mazeCanvas.addEventListener('pointerdown', async () => {
+  await audio.resume()
+})
 
 const faceMesh = createFaceMeshController({
   video: webcam,
   config: CONFIG,
   onResults: (result) => {
-    latestFaceState = result;
+    latestFaceState = result
   },
-  onCameraReady: () => {
-    cameraError.classList.add("hidden");
-    cameraActive = true;
-    updateCameraButton();
-  },
+  onCameraReady: hideCameraError,
   onError: (error) => {
-    const message = error?.message || "카메라 권한을 확인해주세요.";
-    showCameraError(message);
+    showCameraError(error?.message || '카메라 권한을 확인해주세요.')
   },
-});
-
-cameraToggle.addEventListener("click", async () => {
-  cameraToggle.disabled = true;
-
-  try {
-    if (cameraActive) {
-      await faceMesh.stop();
-      cameraActive = false;
-      permissionStatus.textContent = "카메라 멈춤";
-      cameraError.classList.add("hidden");
-      overlay.clear();
-      updateCameraButton();
-    } else {
-      await faceMesh.start();
-    }
-  } catch (error) {
-    showCameraError(error?.message || "카메라를 제어할 수 없습니다.");
-  } finally {
-    updateCameraButton();
-    cameraToggle.disabled = false;
-  }
-});
-
-window.addEventListener("keydown", (event) => {
-  if (event.code === "Space") {
-    event.preventDefault();
-    jump();
-  }
-});
-
-gameCanvas.addEventListener("click", () => {
-  jump();
-});
-
-const clampBar = (value) => `${Math.max(0, Math.min(100, value * 250))}%`;
-
-const formatSessionTime = (elapsedMs) => {
-  const totalSeconds = Math.floor(elapsedMs / 1000);
-  const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
-  const seconds = String(totalSeconds % 60).padStart(2, "0");
-  return `${minutes}:${seconds}`;
-};
+})
 
 const detectionLoop = () => {
-  const now = performance.now();
+  const now = performance.now()
+
   if (latestFaceState.frameId !== lastProcessedFrameId) {
-    latestDetectionResult = latestFaceState.hasFace
-      ? blinkDetector.update(
-          latestFaceState.ear,
-          latestFaceState.timestamp || now,
-        )
-      : blinkDetector.update(null, now);
-    lastProcessedFrameId = latestFaceState.frameId;
+    const previousClosed = eyeSnapshot.isClosed
+    eyeSnapshot = latestFaceState.hasFace
+      ? eyeState.update(latestFaceState.ear, latestFaceState.timestamp || now)
+      : eyeState.update(null, now)
+    lastProcessedFrameId = latestFaceState.frameId
+
+    if (eyeSnapshot.transitioned && eyeSnapshot.isClosed !== previousClosed) {
+      audio.play(eyeSnapshot.isClosed ? 'open' : 'close')
+    }
   }
 
-  earLeft.textContent = latestFaceState.hasFace
-    ? latestFaceState.leftEAR.toFixed(3)
-    : "0.000";
-  earRight.textContent = latestFaceState.hasFace
-    ? latestFaceState.rightEAR.toFixed(3)
-    : "0.000";
-  earLeftFill.style.width = latestFaceState.hasFace
-    ? clampBar(latestFaceState.leftEAR)
-    : "0%";
-  earRightFill.style.width = latestFaceState.hasFace
-    ? clampBar(latestFaceState.rightEAR)
-    : "0%";
-  blinkCount.textContent = String(latestDetectionResult.blinkCount);
-  comfortScore.textContent = latestFaceState.hasFace
-    ? `${Math.max(0, Math.min(199, Math.round((latestFaceState.ear / CONFIG.EAR_THRESHOLD) * 100)))}%`
-    : "0%";
-  sessionTime.textContent = formatSessionTime(now - sessionStartedAt);
-  setStatusPill(latestDetectionResult.isClosed);
-
-  if (latestFaceState.hasFace) {
-    overlay.draw(latestFaceState.landmarks);
-  } else {
-    overlay.clear();
+  if (!eyeSnapshot.isClosed) {
+    player.clearInput()
   }
 
-  if (latestDetectionResult.triggerJump) {
-    dinoGame.jump();
-    app.classList.remove("flash-edge");
-    void app.offsetWidth;
-    app.classList.add("flash-edge");
-    latestDetectionResult = {
-      ...latestDetectionResult,
-      triggerJump: false,
-    };
+  ui.render({
+    leftEAR: latestFaceState.leftEAR,
+    rightEAR: latestFaceState.rightEAR,
+    isClosed: eyeSnapshot.isClosed,
+    hasFace: latestFaceState.hasFace,
+    moveCount: player.moveCount,
+    wallCount: player.wallCount,
+    elapsedMs: now - sessionStartedAt,
+  })
+
+  requestAnimationFrame(detectionLoop)
+}
+
+const gameLoop = (timestamp) => {
+  const moveResult = player.update({
+    timestamp,
+    isMovementEnabled: eyeSnapshot.isClosed,
+    maze,
+  })
+
+  if (moveResult.type === 'move') {
+    audio.play('move')
+  } else if (moveResult.type === 'wall') {
+    audio.play('wall')
+  } else if (moveResult.type === 'clear') {
+    audio.play('clear')
+    resetMaze()
   }
 
-  requestAnimationFrame(detectionLoop);
-};
+  markExplored(maze, player.col, player.row)
+
+  drawMaze({
+    canvas: mazeCanvas,
+    maze,
+    player,
+    cellSize: CONFIG.CELL_SIZE,
+    isClosed: eyeSnapshot.isClosed,
+  })
+
+  requestAnimationFrame(gameLoop)
+}
 
 const start = async () => {
-  dinoGame.start();
-  requestAnimationFrame(detectionLoop);
+  drawMaze({
+    canvas: mazeCanvas,
+    maze,
+    player,
+    cellSize: CONFIG.CELL_SIZE,
+    isClosed: eyeSnapshot.isClosed,
+  })
+  requestAnimationFrame(detectionLoop)
+  requestAnimationFrame(gameLoop)
 
   try {
-    await faceMesh.start();
+    await faceMesh.start()
   } catch (error) {
-    showCameraError(error?.message || "카메라를 시작할 수 없습니다.");
+    showCameraError(error?.message || '카메라를 시작할 수 없습니다.')
   }
-};
+}
 
-start();
+start()
