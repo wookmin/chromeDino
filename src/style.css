@@ -1,8 +1,12 @@
 :root {
-  font-family: 'Trebuchet MS', 'Avenir Next', sans-serif;
+  font-family: "Trebuchet MS", "Avenir Next", sans-serif;
   color: #085041;
   background:
-    radial-gradient(circle at top left, rgba(200, 237, 227, 0.95), transparent 26%),
+    radial-gradient(
+      circle at top left,
+      rgba(200, 237, 227, 0.95),
+      transparent 26%
+    ),
     linear-gradient(180deg, #eaf6f2 0%, #deefe9 100%);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -19,6 +23,7 @@
   --mint: #9de3d2;
   --mint-soft: #dff5ee;
   --blink: #64bea5;
+  overflow: hidden;
 }
 
 * {
@@ -44,7 +49,7 @@ input {
 }
 
 #app::after {
-  content: '';
+  content: "";
   position: fixed;
   inset: 12px;
   border-radius: 28px;
@@ -112,7 +117,7 @@ h1 {
 }
 
 .brand-eye::after {
-  content: '';
+  content: "";
   position: absolute;
   left: 50%;
   top: 50%;
