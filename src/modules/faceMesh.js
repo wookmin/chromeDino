@@ -14,6 +14,7 @@ export const createFaceMeshController = ({
 }) => {
   let camera = null
   let frameId = 0
+  let isRunning = false
 
   if (!CameraClass || !FaceMeshClass) {
     throw new Error('MediaPipe modules failed to load.')
@@ -58,24 +59,60 @@ export const createFaceMeshController = ({
   })
 
   const start = async () => {
+    if (isRunning) {
+      return
+    }
+
     try {
       camera = new CameraClass(video, {
         width: config.CAMERA_WIDTH,
         height: config.CAMERA_HEIGHT,
         onFrame: async () => {
+          if (!isRunning) {
+            return
+          }
           await faceMesh.send({ image: video })
         },
       })
 
+      isRunning = true
       await camera.start()
       onCameraReady?.()
     } catch (error) {
+      isRunning = false
       onError?.(error)
       throw error
     }
   }
 
+  const stop = async () => {
+    if (!isRunning) {
+      return
+    }
+
+    isRunning = false
+
+    if (camera) {
+      await camera.stop()
+      camera = null
+    }
+
+    video.pause()
+    video.srcObject = null
+
+    onResults({
+      frameId: frameId += 1,
+      hasFace: false,
+      landmarks: [],
+      leftEAR: 0,
+      rightEAR: 0,
+      ear: 0,
+      timestamp: performance.now(),
+    })
+  }
+
   return {
     start,
+    stop,
   }
 }

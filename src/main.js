@@ -19,6 +19,7 @@ app.innerHTML = `
       <div class="header-pills">
         <div class="hint-pill">깜빡여서 점프</div>
         <div class="mode-pill" id="permission-status">눈 건강 모드</div>
+        <button class="camera-toggle" id="camera-toggle" type="button">끄기</button>
       </div>
     </header>
 
@@ -81,6 +82,7 @@ const sessionTime = document.querySelector('#session-time')
 const blinkState = document.querySelector('#blink-state')
 const permissionStatus = document.querySelector('#permission-status')
 const cameraError = document.querySelector('#camera-error')
+const cameraToggle = document.querySelector('#camera-toggle')
 
 const blinkDetector = new BlinkDetector(CONFIG)
 const overlay = createDebugOverlay(overlayCanvas, CONFIG)
@@ -105,6 +107,7 @@ let latestDetectionResult = {
   threshold: CONFIG.EAR_THRESHOLD,
 }
 let lastProcessedFrameId = -1
+let cameraActive = false
 
 const setStatusPill = (isBlinking) => {
   blinkState.classList.toggle('state-open', !isBlinking)
@@ -115,6 +118,13 @@ const showCameraError = (message) => {
   cameraError.textContent = message
   cameraError.classList.remove('hidden')
   permissionStatus.textContent = '연결 오류'
+  cameraToggle.textContent = '켜기'
+  cameraActive = false
+}
+
+const updateCameraButton = () => {
+  cameraToggle.textContent = cameraActive ? '끄기' : '켜기'
+  cameraToggle.classList.toggle('is-off', !cameraActive)
 }
 
 const faceMesh = createFaceMeshController({
@@ -126,11 +136,35 @@ const faceMesh = createFaceMeshController({
   onCameraReady: () => {
     permissionStatus.textContent = '눈 건강 모드'
     cameraError.classList.add('hidden')
+    cameraActive = true
+    updateCameraButton()
   },
   onError: (error) => {
     const message = error?.message || '카메라 권한을 확인해주세요.'
     showCameraError(message)
   },
+})
+
+cameraToggle.addEventListener('click', async () => {
+  cameraToggle.disabled = true
+
+  try {
+    if (cameraActive) {
+      await faceMesh.stop()
+      cameraActive = false
+      permissionStatus.textContent = '카메라 멈춤'
+      cameraError.classList.add('hidden')
+      overlay.clear()
+      updateCameraButton()
+    } else {
+      await faceMesh.start()
+    }
+  } catch (error) {
+    showCameraError(error?.message || '카메라를 제어할 수 없습니다.')
+  } finally {
+    updateCameraButton()
+    cameraToggle.disabled = false
+  }
 })
 
 window.addEventListener('keydown', (event) => {
