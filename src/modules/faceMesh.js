@@ -1,9 +1,4 @@
-import '@mediapipe/camera_utils'
-import '@mediapipe/face_mesh'
 import { calculateEyeEARs } from './earCalculator.js'
-
-const CameraClass = globalThis.Camera
-const FaceMeshClass = globalThis.FaceMesh
 
 export const createFaceMeshController = ({
   video,
@@ -13,50 +8,66 @@ export const createFaceMeshController = ({
   onError,
 }) => {
   let camera = null
+  let faceMesh = null
   let frameId = 0
   let isRunning = false
+  let CameraClass = null
 
-  if (!CameraClass || !FaceMeshClass) {
-    throw new Error('MediaPipe modules failed to load.')
-  }
-
-  const faceMesh = new FaceMeshClass({
-    locateFile: (file) => `/mediapipe/face_mesh/${file}`,
-  })
-
-  faceMesh.setOptions({
-    maxNumFaces: 1,
-    refineLandmarks: true,
-    minDetectionConfidence: 0.5,
-    minTrackingConfidence: 0.5,
-  })
-
-  faceMesh.onResults((results) => {
-    const landmarks = results.multiFaceLandmarks?.[0]
-
-    if (!landmarks) {
-      onResults({
-        frameId: frameId += 1,
-        hasFace: false,
-        landmarks: [],
-        ear: 0,
-        timestamp: performance.now(),
-      })
+  const loadMediaPipe = async () => {
+    if (CameraClass && faceMesh) {
       return
     }
 
-    const { leftEAR, rightEAR, averageEAR } = calculateEyeEARs(landmarks)
+    await import('@mediapipe/camera_utils')
+    await import('@mediapipe/face_mesh')
 
-    onResults({
-      frameId: frameId += 1,
-      hasFace: true,
-      landmarks,
-      leftEAR,
-      rightEAR,
-      ear: averageEAR,
-      timestamp: performance.now(),
+    CameraClass = globalThis.Camera
+    const FaceMeshClass = globalThis.FaceMesh
+
+    if (!CameraClass || !FaceMeshClass) {
+      throw new Error('MediaPipe modules failed to load.')
+    }
+
+    faceMesh = new FaceMeshClass({
+      locateFile: (file) => `${import.meta.env.BASE_URL}mediapipe/face_mesh/${file}`,
     })
-  })
+
+    faceMesh.setOptions({
+      maxNumFaces: 1,
+      refineLandmarks: true,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.5,
+    })
+
+    faceMesh.onResults((results) => {
+      const landmarks = results.multiFaceLandmarks?.[0]
+
+      if (!landmarks) {
+        onResults({
+          frameId: frameId += 1,
+          hasFace: false,
+          landmarks: [],
+          leftEAR: 0,
+          rightEAR: 0,
+          ear: 0,
+          timestamp: performance.now(),
+        })
+        return
+      }
+
+      const { leftEAR, rightEAR, averageEAR } = calculateEyeEARs(landmarks)
+
+      onResults({
+        frameId: frameId += 1,
+        hasFace: true,
+        landmarks,
+        leftEAR,
+        rightEAR,
+        ear: averageEAR,
+        timestamp: performance.now(),
+      })
+    })
+  }
 
   const start = async () => {
     if (isRunning) {
@@ -64,6 +75,8 @@ export const createFaceMeshController = ({
     }
 
     try {
+      await loadMediaPipe()
+
       camera = new CameraClass(video, {
         width: config.CAMERA_WIDTH,
         height: config.CAMERA_HEIGHT,
